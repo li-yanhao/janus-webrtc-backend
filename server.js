@@ -2,8 +2,6 @@
 
 var express = require('express');
 
-var request = require('request');
-
 var axios = require('axios');
 
 var app = express();
@@ -14,7 +12,35 @@ var { spawn } = require('child_process');
 
 var fs = require('fs')
 
+var bodyParser = require("body-parser")
 
+var janusHost = "http://localhost:8088/janus"
+var adminHost = "http://localhost:7088/admin"
+var ffmpegHost = "127.0.0.1"
+var rtmpHost = "127.0.0.1"
+var rtmpStreamPort = 1935
+
+const sessionId = 1;
+var handlerId = null;
+
+var publisherId = 5035925950
+var roomId = 1234
+var audioPort = 10033
+var videoPort = 10038
+var streamName = 'nihao'
+var admin_key = 'supersecret'
+var clientId = 5678
+
+
+
+app.use(bodyParser.urlencoded({ extended: false }));
+app.use(bodyParser.json());
+app.use(function (req, res, next) {
+    res.header("Access-Control-Allow-Origin", "*"); // update to match the domain you will make the request from
+    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+    res.header("Access-Control-Allow-Methods", "*");
+    next();
+})
 
 
 // Some examples for tutorial
@@ -25,18 +51,11 @@ app.get('/get', function (req, res) {
 });
 
 const configurejanus = args => {
-    console.log(args)  // json
-    return args.yanhao
+    // console.log(args)  // json
+    return
 }
 
-app.post('/stream', function (req, res) {
-    const config = configurejanus(req.body)
-    if (!config) {
-        res.status(500);
-    } else {
-        res.status(201).send(config);
-    }
-});
+
 
 app.listen(PORT, function () {
     console.log('Server is running on PORT:', PORT);
@@ -44,13 +63,7 @@ app.listen(PORT, function () {
 
 // Start the functional parts of the backend script
 
-var janusHost = "http://localhost:8088/janus"
-var ffmpegHost = "127.0.0.1"
-var rtmpHost = "127.0.0.1"
-var rtmpStreamPort = 1935
 
-const sessionId = 1;
-var adminId = null;
 
 function createSession() {
     return new Promise((resolve, reject) => {
@@ -63,27 +76,26 @@ function createSession() {
     })
 }
 
-function createHandler() {
-    return new Promise((resolve, reject) => {
-        var handlerId;
-        axios.post(janusHost + '/' + sessionId, {
-            janus: "attach",
-            transaction: "create videoroom administrator",
-            plugin: "janus.plugin.videoroom",
-            apisecret: "janusrocks"
-        }).then(res => {
-            var body = res.data
-            switch (body.janus) {
-                case "error":
-                    // console.log("janus error: " + JSON.stringify(body.error));
-                    break;
-                case "success":
-                    adminId = body.data.id;
-                    break;
-                default: console.log("janus message is not identified")
-            }
-            resolve()
-        })
+var createHandler = async function () {
+
+    // var handlerId;
+    await axios.post(janusHost + '/' + sessionId, {
+        janus: "attach",
+        transaction: "create videoroom administrator",
+        plugin: "janus.plugin.videoroom",
+        apisecret: "janusrocks"
+    }).then(res => {
+        var body = res.data
+        switch (body.janus) {
+            case "error":
+                // console.log("janus error: " + JSON.stringify(body.error));
+                break;
+            case "success":
+                handlerId = body.data.id;
+                break;
+            default: console.log("janus message is not identified")
+        }
+
     })
 }
 
@@ -91,7 +103,7 @@ function createHandler() {
 function listRoomId() {
     return new Promise((resolve, reject) => {
         var roomIds = [];
-        axios.post(janusHost + '/' + sessionId + '/' + adminId, {
+        axios.post(janusHost + '/' + sessionId + '/' + handlerId, {
             janus: "message",
             transaction: "list room Ids",
             apisecret: "janusrocks",
@@ -116,7 +128,7 @@ function listParticipants(roomIds) {
 
         for (var i in roomIds) {
             requests.push(
-                axios.post(janusHost + '/' + sessionId + '/' + adminId, {
+                axios.post(janusHost + '/' + sessionId + '/' + handlerId, {
                     janus: "message",
                     transaction: "list room Ids",
                     apisecret: "janusrocks",
@@ -156,7 +168,7 @@ function createFowarder([roomId, publisherId]) {
         video_pt = 96
         // roomId = 1234
         // publisherId = 6764174377861019
-        axios.post(janusHost + '/' + sessionId + '/' + adminId, {
+        axios.post(janusHost + '/' + sessionId + '/' + handlerId, {
             janus: "message",
             transaction: "rtp forward from " + publisherId + " in room " + roomId,
             apisecret: "janusrocks",
@@ -179,11 +191,12 @@ function createFowarder([roomId, publisherId]) {
 
 function parseForwarders(respond, publisherId) {
     var forwarders = respond.data.plugindata.data.rtp_forwarders
+    console.log(respond.data.plugindata.data)
     forwarder_raw = forwarders.filter(data => {
         return data.publisher_id == publisherId
     })
     var forwarder
-    if (forwarder_raw.length > 0){
+    if (forwarder_raw.length > 0) {
         forwarder = forwarder_raw[0].rtp_forwarder
     }
     var streams = []
@@ -200,14 +213,14 @@ function parseForwarders(respond, publisherId) {
 
 function clearForwarders([roomId, publisherId]) {
     var listForwarders = new Promise((resolve, reject) => {
-        axios.post(janusHost + '/' + sessionId + '/' + adminId, {
+        axios.post(janusHost + '/' + sessionId + '/' + handlerId, {
             janus: "message",
             transaction: "list all rtp forwards",
             apisecret: "janusrocks",
             body: {
                 request: "listforwarders",
                 room: roomId,
-                secret: "adminpwd"
+                secret: "secret"
             }
         }).then(res => {
             var streams = parseForwarders(res, publisherId)
@@ -220,7 +233,7 @@ function clearForwarders([roomId, publisherId]) {
             var requests = []
             for (var i in streams) {
                 requests.push(axios.post(
-                    janusHost + '/' + sessionId + '/' + adminId, {
+                    janusHost + '/' + sessionId + '/' + handlerId, {
                         janus: "message",
                         transaction: "remove rtp forward",
                         apisecret: "janusrocks",
@@ -284,27 +297,245 @@ function createFFmpeg(nodeStreamIp, audioPort, videoPort, streamName) {
 // createSession().then(createHandler).then(listRoomId).then(listParticipants).then(res => console.log(JSON.stringify(res)))
 
 // Forward rtp given the publisher id and room id.
-var publisherId = 4047519273076980
-var roomId = 1234
-var audioPort = 10033
-var videoPort = 10038
-var streamName = 'nihao'
+
 
 function startForwarding(roomId, publisherId) {
     createSession().then(createHandler)
         .then(() => { return new Promise(resolve => resolve([roomId, publisherId])) })
         .then(clearForwarders)
-    .then(createFowarder)
-    .then(res => console.log(JSON.stringify(res)))
+        .then(createFowarder)
+        .then(res => console.log(JSON.stringify(res)))
 }
 
 
-startForwarding(roomId, publisherId)
-createFFmpeg(ffmpegHost, audioPort, videoPort, streamName)
+// startForwarding(roomId, publisherId)
+// createFFmpeg(ffmpegHost, audioPort, videoPort, streamName)
+
+/** *-* Processing of a client request:
+ * 1. create new session/handler to manage client Alice (done)
+ * 
+ * 2. set session_timeout to max (failed, can't set timeout value to a specific session)
+ * 3. create a room for Alice with a pin (for Alice to join) and a secret (for me to manipulate the room)
+ * 4. Join the room. 
+ * 5. Set eventHandler() to listen any event from the room => event: 
+ *          'keep alive': 
+ *          'joined': 
+ *          'leave':
+ *          'destroyed':
+ *          'error':  
+ * 6. create id for Alice and send pin and id to Alice 
+ * 7. wait for the joined event of Alice 
+ * 8. start rtp forwarder and ffmpeg transcoder (done)
+ * 9. Wait for some unknown requests ... then handle them !
+ * 9. wait for Alice to leave 
+ * 10. destroy the room (done)
+ * 
+ */
 
 
 
+var roomId = 1234
+var pin = '1234'
+
+var createRoom = (roomId, pin, secret /*, token */) => async function () {
+    await axios.post(janusHost + '/' + sessionId + '/' + handlerId, {
+        janus: "message",
+        transaction: "create room of id " + roomId + " with pin " + pin + " and secret " + secret,
+        apisecret: "janusrocks",
+        body: {
+            request: "create",
+            room: roomId,
+            secret: secret,
+            // pin: pin,
+            is_private: true,
+            // allowed: [token1, token2, ...]
+            admin_key: 'supersecret'
+        },
+    }).then(res => {
+        console.log(res.data)
+        console.log()
+    })
+}
+
+var destroyRoom = (roomId, secret) => async function () {
+    axios.post(janusHost + '/' + sessionId + '/' + handlerId, {
+        janus: "message",
+        transaction: "destroy room of id " + roomId,
+        apisecret: "janusrocks",
+        body: {
+            request: "destroy",
+            room: roomId,
+            secret: secret
+        },
+    }).then(res => {
+        console.log(res.data)
+        console.log()
+    })
+}
+
+var setTimeout = (timeout) => async function () {
+    axios.post(adminHost, {
+        janus: "set_session_timeout",
+        timeout: timeout,
+        transaction: "set timeout value to " + timeout + 's',
+        admin_secret: 'janusoverlord'
+    }).then(res => {
+        console.log(res.data)
+    })
+}
+
+var joinRoom = (roomId, pin) => async function () {
+    await axios.post(janusHost + '/' + sessionId + '/' + handlerId, {
+        janus: "message",
+        transaction: "join the room of id " + roomId + " as room holder",
+        apisecret: "janusrocks",
+        body: {
+            request: "join",
+            ptype: 'publisher',
+            room: roomId,
+            id: 1234,
+            pin: pin,
+
+        },
+    })
+}
+/**
+ *  a specific event listener to wait for the publisher to join
+ */
+var waitPublisher = async function (publisherId) {
+    var maxev = 5;
+    var longpoll = janusHost + '/' + sessionId + '?rid=' + new Date().getTime();
+    longpoll = longpoll + '&maxev=' + 5;
+    var joined = false;
+    // Parse the event message and check if the publisher has joined the room
+    var parseJoined = json => {
+        try {
+            console.log(json.plugindata.data.publishers)
+            if (json.plugindata.data.publishers.filter(data => {
+                return data.id == publisherId
+            })){
+                console.log("parsed ! ")
+                console.log(json.plugindata.data.publishers)
+                return true
+            }
+            else
+                return false
+        } catch (e) {
+            console.log("non parsed :(")
+            return false
+        }
+    }
+    var cn = 1
+    while (!joined) {
+        await axios.get(longpoll).then(res => {
+            console.log('count = ' + cn++)
+            console.log(res.data)
+            for (var i in res.data) {
+                if (parseJoined(res.data[i])) {
+                    joined = true;
+                    break;
+                }
+            }
+        })
+    }
+}
+
+async function listenEvent() {
+    var longpoll = janusHost + '/' + sessionId + '?rid=' + new Date().getTime();
+    longpoll = longpoll + '&maxev=' + 5;
+    var events;
+    while (sessionId !== undefined && sessionId !== null) {
+        await axios.get(longpoll).then(res => {
+            for (var i in res.data) {
+                console.log(res.data[i])
+            }
+            events = res.data;
+        })
+        handleEvent(events);
+    }
+}
+
+async function handleEvent(json) {
+    for (var i in json) {
+        switch (json[i].janus) {
+            case 'event':
+                handleVideoroomEvent(json[i].plugindata.data)
+            case 'keepalive':
+                break;
+            default:
+                console.log("handleEvent: unknown event")
+        }
+    }
+}
+
+async function handleVideoroomEvent(json) {
+    switch (json.videoroom) {
+        case 'event':
+            if (json.publishers != null) {
+                console.log(json.publishers)
+                for (var i in json.publishers) {
+                    if (json.publishers[i].id == publisherId) {
+                        // startForwarding(roomId, publisherId)
+                        // createFFmpeg(ffmpegHost, audioPort, videoPort, streamName)
+                    }
+                }
+            }
+            break;
+        case 'joined':
+            break;
+        case 'destroyed':
+            break;
+        default:
+            console.log("Something weird in videoroom plugin event")
+            break;
+    }
+}
+
+var responseConfig = (requestConfig) => {
+    var resConfig;
+    if (requestConfig.login == "yanhao" && requestConfig.passwd == '1234')
+        resConfig = {
+            status: "success",
+            key: {
+                pin: 1234,
+                id: publisherId
+            }
+        };
+    else
+        resConfig = {
+            status: "error",
+            reason: "Authentification failed"
+        }
+    return resConfig
+}
+
+app.post('/stream', async function (req, res) {
+    console.log(req.body)
+    var resConfig = responseConfig(req.body)
+    await createSession().then(createHandler)
+        .then(createRoom(roomId, pin, 'secret'))
+        .then(joinRoom(roomId, pin))
+    if (resConfig.status == 'success') {
+        res.status(201).send(resConfig);
+    }
+    else {
+        res.status(500).send(resConfig);
+    }
+    var allowed = await waitPublisher(publisherId)
+    startForwarding(roomId, publisherId)
+    createFFmpeg(ffmpegHost, audioPort, videoPort, streamName)
+    listenEvent();
+});
 
 
+// createSession().then(createHandler)
+//     .then(destroyRoom(roomId, 'secret'))
+//     .then(createRoom(roomId, pin, 'secret')).then(joinRoom(roomId, pin))
+//     .then(waitPublisher)
+//     .then(()=>{
+//         startForwarding(roomId, publisherId);
+//         createFFmpeg(ffmpegHost, audioPort, videoPort, streamName)
+//     })
 
-
+// then(destroyRoom(roomId, 'secret')).
+// createSession().then(createHandler).then(destroyRoom(roomId, 'secret'))
