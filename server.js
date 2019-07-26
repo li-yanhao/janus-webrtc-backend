@@ -516,15 +516,17 @@ app.post('/stream', async function (req, res) {
         .then(createRoom(roomId, pin, 'secret'))
         .then(joinRoom(roomId, pin))
     if (resConfig.status == 'success') {
-        res.status(201).send(resConfig);
+        await res.status(201).send(resConfig);
+        waitPublisher(publisherId)
+        startForwarding(roomId, publisherId)
+        createFFmpeg(ffmpegHost, audioPort, videoPort, streamName)
+        listenEvent();
+
     }
     else {
         res.status(500).send(resConfig);
     }
-    var allowed = await waitPublisher(publisherId)
-    startForwarding(roomId, publisherId)
-    createFFmpeg(ffmpegHost, audioPort, videoPort, streamName)
-    listenEvent();
+    // var allowed = await waitPublisher(publisherId)
 });
 
 
