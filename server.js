@@ -24,7 +24,9 @@ const sessionId = 1;
 var handlerId = null;
 
 var publisherId = 5035925950
-var roomId = 1234
+var roomId = 4321
+var pin = '1234'
+
 var audioPort = 10033
 var videoPort = 10038
 var streamName = 'nihao'
@@ -166,8 +168,6 @@ function createForwarder([roomId, publisherId]) {
         audio_pt = 111
         video_port = 10038
         video_pt = 96
-        // roomId = 1234
-        // publisherId = 6764174377861019
         axios.post(janusHost + '/' + sessionId + '/' + handlerId, {
             janus: "message",
             transaction: "rtp forward from " + publisherId + " in room " + roomId,
@@ -242,7 +242,7 @@ function clearForwarders([roomId, publisherId]) {
                             room: roomId,
                             publisher_id: publisherId,
                             stream_id: streams[i],
-                            secret: "adminpwd"
+                            secret: "secret"
                         }
                     })
                 )
@@ -302,7 +302,7 @@ function createFFmpeg(nodeStreamIp, audioPort, videoPort, streamName) {
 function startForwarding(roomId, publisherId) {
     createSession().then(createHandler)
         .then(() => { return new Promise(resolve => resolve([roomId, publisherId])) })
-        .then(clearForwarders)
+        // .then(clearForwarders)
         .then(createForwarder)
         .then(res => console.log(JSON.stringify(res)))
 }
@@ -334,8 +334,7 @@ function startForwarding(roomId, publisherId) {
 
 
 
-var roomId = 1234
-var pin = '1234'
+
 
 var createRoom = (roomId, pin, secret /*, token */) => async function () {
     await axios.post(janusHost + '/' + sessionId + '/' + handlerId, {
@@ -346,8 +345,12 @@ var createRoom = (roomId, pin, secret /*, token */) => async function () {
             request: "create",
             room: roomId,
             secret: secret,
-            // pin: pin,
+            pin: pin,
             is_private: true,
+            bitrate: 128000,
+            fir_freq: 1,
+            videocodec: "h264",
+            record: false,
             // allowed: [token1, token2, ...]
             admin_key: 'supersecret'
         },
@@ -497,7 +500,8 @@ var responseConfig = (requestConfig) => {
         resConfig = {
             status: "success",
             key: {
-                pin: 1234,
+                room: roomId,
+                pin: pin,
                 id: publisherId
             }
         };
@@ -517,7 +521,7 @@ app.post('/stream', async function (req, res) {
         .then(joinRoom(roomId, pin))
     if (resConfig.status == 'success') {
         await res.status(201).send(resConfig);
-        waitPublisher(publisherId)
+        await waitPublisher(publisherId)
         startForwarding(roomId, publisherId)
         createFFmpeg(ffmpegHost, audioPort, videoPort, streamName)
         listenEvent();
