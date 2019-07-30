@@ -160,7 +160,7 @@ function parseRoomParticipants(respond) {
     return room_participants
 }
 
-function createFowarder([roomId, publisherId]) {
+function createForwarder([roomId, publisherId]) {
     return new Promise((resolve, reject) => {
         audio_port = 10033
         audio_pt = 111
@@ -303,7 +303,7 @@ function startForwarding(roomId, publisherId) {
     createSession().then(createHandler)
         .then(() => { return new Promise(resolve => resolve([roomId, publisherId])) })
         .then(clearForwarders)
-        .then(createFowarder)
+        .then(createForwarder)
         .then(res => console.log(JSON.stringify(res)))
 }
 
