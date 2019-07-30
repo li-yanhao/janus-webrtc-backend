@@ -14,8 +14,8 @@ var fs = require('fs')
 
 var bodyParser = require("body-parser")
 
-var janusHost = "http://localhost:8088/janus"
-var adminHost = "http://localhost:7088/admin"
+var janusHost = "http://0.0.0.0:8088/janus"
+var adminHost = "http://0.0.0.0:7088/admin"
 var ffmpegHost = "127.0.0.1"
 var rtmpHost = "127.0.0.1"
 var rtmpStreamPort = 1935
