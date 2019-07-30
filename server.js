@@ -181,7 +181,7 @@ function createFowarder([roomId, publisherId]) {
                 "audio_pt": audio_pt,
                 "video_port": video_port,
                 "video_pt": video_pt,
-                "secret": "adminpwd"
+                "secret": "secret"
             }
         }).then(res => {
             resolve(res.data.plugindata.data)
