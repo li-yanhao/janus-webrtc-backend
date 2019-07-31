@@ -324,7 +324,7 @@ function startForwarding(roomId, publisherId) {
  *          'destroyed':
  *          'error':  
  * 6. create id for Alice and send pin and id to Alice 
- * 7. wait for the joined event of Alice 
+ * 7. wait for the joined event of Alice (done)
  * 8. start rtp forwarder and ffmpeg transcoder (done)
  * 9. Wait for some unknown requests ... then handle them !
  * 9. wait for Alice to leave 
