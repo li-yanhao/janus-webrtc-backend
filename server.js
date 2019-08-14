@@ -8,7 +8,7 @@ var app = express();
 
 var PORT = 3000;
 
-var { spawn } = require('child_process');
+var {spawn} = require('child_process');
 
 var fs = require('fs')
 
@@ -180,6 +180,8 @@ async function createForwarder(config /*[roomId, publisherId]*/) {
             "video_pt": video_pt,
             "secret": "secret"
         }
+    }).then(res => {
+        console.log("rtp_forward response: " + JSON.stringify(res.data))
     })
     return config
 }
@@ -305,13 +307,15 @@ var ffmpeg_args = (name) => {
  * @param {*} videoPort The port for receiving video stream
  * @param {*} streamName The name of the rtmp stream on Nginx-rtmp server 
  */
-async function createFFmpeg(nodeStreamIp, audioPort, videoPort, streamName) {
-    generateSdpStreamConfig(nodeStreamIp, audioPort, videoPort)
-    var child = spawn('ffmpeg', ffmpeg_args(streamName))
-
+async function createFFmpeg(config) {
+    generateSdpStreamConfig(config.nodeStreamIp, config.audioPort, config.videoPort)
+    console.log("ffmpeg args: \n" + ffmpeg_args(config.streamName))
+    var child = spawn('ffmpeg', ffmpeg_args(config.streamName));
+    config.ffmpegProcess = child;
     child.stderr.on('data', function (data) {
         console.log("ffmpeg log : " + data)
     });
+    return config;
 }
 
 /**
@@ -345,10 +349,12 @@ async function createRoom(config /*roomId, pin, secret, token */) {
             secret: config.secret,
             pin: config.pin,
             is_private: false,
-            bitrate: 128000,
+            bitrate: 12800000,
             fir_freq: 1,
             videocodec: "h264",
             record: false,
+            videoorient_ext: true,
+            playoutdelay_ext: true,
             // allowed: [adminToken, config.token]
             admin_key: 'supersecret'
         },
@@ -395,7 +401,7 @@ async function joinRoom(config /*roomId, pin*/) {
 /**
  *  a specific event listener to wait for the publisher to join
  */
-var waitPublisher = async function (publisherId) {
+async function waitPublisher(publisherId) {
     var maxev = 5;
     var longpoll = janusHost + '/' + sessionId + '?rid=' + new Date().getTime();
     longpoll = longpoll + '&maxev=' + 5;
@@ -444,6 +450,7 @@ async function listenEvent(config) {
             handleEvent(res.data, config);
         })
     }
+    console.log("\n ### ListenEvent completed :) ### \n")
     return config
 }
 
@@ -466,20 +473,23 @@ async function handleVideoroomEvent(json, config) {
             // some videoroom room events
             if (json.hasOwnProperty('leaving')) {
                 if (json.leaving == publisherId) {
-                    destroyRoom(config)
-                    config.leaving = true;
                     // then destroy the room
                     // TODO 
-
+                    config.ffmpegProcess.kill();
+                    config.ffmpegProcess = null;
+                    await destroyRoom(config)
+                    config.leaving = true;
+                    config.sessionId = null;
                 }
             }
-            break
+            break;
         case 'joined':
             // admin joined the room
             break;
         case 'destroyed':
             // room has been destroyed, stop listening.
             config.roomId = null;
+            config.sessionId = null;
             break;
         default:
             console.log("Something weird in videoroom plugin event")
@@ -535,20 +545,22 @@ app.post('/stream', async function (req, res) {
     var roomId = resConfig.key.room
     var adminConfig = {
         sessionId: 1, handlerId: null,
-        roomId: roomId, pin: pin, secret: 'secret', token: null
+        roomId: roomId, pin: pin, secret: 'secret', token: null,
+        nodeStreamIp: ffmpegHost, audioPort: audioPort, videoPort: videoPort, streamName: "nihao",
+        ffmpegProcess: null
     };
     if (resConfig.status == 'success') {
-        await createSession(adminConfig).then(attachHandler)
+        await createSession(adminConfig)
+            .then(attachHandler)
             .then(createRoom)
-            .then(joinRoom)
+            .then(joinRoom);
         res.status(201).send(resConfig);
-        await waitPublisher(publisherId)
-        await createForwarder(adminConfig)
-        // await startForwarding(adminConfig)
-        //     createFFmpeg(ffmpegHost, audioPort, videoPort, streamName)]);
-        // await startForwarding(roomId, publisherId)
-        await createFFmpeg(ffmpegHost, audioPort, videoPort, streamName)
-        updateConfig(); // update audioPort, videoPort and roomId config
+        await waitPublisher(publisherId);
+        console.log(JSON.stringify(adminConfig))
+        await createForwarder(adminConfig);
+        
+        createFFmpeg(adminConfig);
+        // updateConfig(); // update audioPort, videoPort and roomId config
         listenEvent(adminConfig);
 
     }
