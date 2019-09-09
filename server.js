@@ -295,7 +295,8 @@ var ffmpeg_args = (name) => {
         '-protocol_whitelist', 'file,udp,rtp',
         '-i', 'v' + videoPort + '_a' + audioPort + '.sdp',
         '-c:v', 'copy', '-c:a', 'aac', '-ar', '16k', '-ac', '1',
-        '-preset', 'ultrafast', '-tune', 'zerolatency',
+        // '-preset', 'ultrafast', 
+        '-tune', 'zerolatency',
         '-f', 'flv', 'rtmp://' + rtmpHost + ':' + rtmpStreamPort + '/stream/' + name
     ];
 };
